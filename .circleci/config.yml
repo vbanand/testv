@@ -1,0 +1,59 @@
+version: 2.1
+jobs:
+  build:
+    working_directory: ~/tmp
+    docker:
+      - image: circleci/node:7
+    steps:
+      - checkout
+      - run: npm install
+      - run: npm test
+      
+  microk8s-check:
+    machine:
+      image: ubuntu-1604:201903-01
+    steps:
+      - run:
+          name: Install microk8s
+          command: |
+            sudo snap install microk8s --classic
+            sudo snap alias microk8s.kubectl kubectl
+            echo 'export PATH="/snap/bin:$PATH"' >> $BASH_ENV
+      - checkout
+      - run:
+          name: Enable services
+          command: |
+            microk8s.start
+            microk8s.enable dns dashboard
+            microk8s.kubectl get all --all-namespaces
+            microk8s.kubectl config view --raw > $HOME/.kube/config
+            kubectl get nodes
+            sudo snap install helm --classic
+            helm init --wait
+            sleep 25 && kubectl get po --all-namespaces
+            helm ls
+            helm install --name wordpress stable/wordpress
+            kubectl get services
+            sleep 15 && kubectl get po --all-namespaces
+            kubectl get po --all-namespaces
+            sleep 10
+            kubectl get po --all-namespaces
+            helm delete --purge wordpress
+            docker run hello-world
+            docker pull postman/newman:ubuntu
+            docker run -t postman/newman:ubuntu run "https://www.getpostman.com/collections/8a0c9bc08f062d12dcda"
+            ip a
+            docker run -v /home/circleci/project/postman:/etc/newman -t postman/newman:ubuntu run Marketplace.postman_collection.json -e Marketplace.postman_environment.json
+
+
+
+workflows:
+  build_docker_image:
+    jobs:
+    - build:
+        filters:
+          tags:
+            only: /.*/   
+    - microk8s-check:
+        requires:
+          - build
